@@ -760,18 +760,17 @@ class OIDCTokenView(HomeAssistantView):
         if code not in auth_codes:
             return web.json_response({"error": "invalid_grant"}, status=400)
 
-        auth_data = auth_codes[code]
+        # Burn the code on first use so concurrent redemptions cannot race.
+        auth_data = auth_codes.pop(code)
 
         # Validate authorization code
         if auth_data["expires_at"] < time.time():
-            del auth_codes[code]
             return web.json_response({"error": "invalid_grant"}, status=400)
 
         # The code may only be redeemed by the client it was issued to
         # (RFC 6749 §4.1.3). A redemption attempt by another client consumes
         # the code so it cannot be retried.
         if auth_data["client_id"] != client_id:
-            del auth_codes[code]
             _LOGGER.warning(
                 "Authorization code issued to client %s redeemed by client %s",
                 auth_data["client_id"],
@@ -786,7 +785,6 @@ class OIDCTokenView(HomeAssistantView):
         code_challenge = auth_data.get("code_challenge")
         if code_challenge:
             if not code_verifier:
-                del auth_codes[code]
                 return web.json_response(
                     {"error": "invalid_grant", "error_description": "code_verifier required"},
                     status=400,
@@ -799,7 +797,6 @@ class OIDCTokenView(HomeAssistantView):
                 )
                 if code_challenge_method != CODE_CHALLENGE_METHOD_S256:
                     # Only S256 method is supported (RFC 7636 + OAuth 2.1)
-                    del auth_codes[code]
                     return web.json_response(
                         {
                             "error": "invalid_grant",
@@ -818,7 +815,6 @@ class OIDCTokenView(HomeAssistantView):
                 )
 
                 if computed_challenge != code_challenge:
-                    del auth_codes[code]
                     _LOGGER.warning(
                         "PKCE verification failed for client %s - expected %s, got %s",
                         auth_data["client_id"],
@@ -830,7 +826,6 @@ class OIDCTokenView(HomeAssistantView):
                         status=400,
                     )
             except Exception as e:
-                del auth_codes[code]
                 _LOGGER.error("Error verifying PKCE: %s", str(e), exc_info=True)
                 return web.json_response(
                     {"error": "invalid_grant", "error_description": "PKCE verification error"},
@@ -869,9 +864,6 @@ class OIDCTokenView(HomeAssistantView):
 
         # Persist refresh tokens to storage
         await _save_refresh_tokens(hass)
-
-        # Delete used authorization code
-        del auth_codes[code]
 
         response_body: dict[str, Any] = {
             "access_token": access_token,
