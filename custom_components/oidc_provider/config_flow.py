@@ -4,7 +4,13 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 
-from .const import CONF_REQUIRE_PKCE, DEFAULT_REQUIRE_PKCE, DOMAIN
+from .const import (
+    CONF_ALLOW_DYNAMIC_REGISTRATION,
+    CONF_REQUIRE_PKCE,
+    DEFAULT_ALLOW_DYNAMIC_REGISTRATION,
+    DEFAULT_REQUIRE_PKCE,
+    DOMAIN,
+)
 
 
 class OIDCProviderConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -53,6 +59,13 @@ class OIDCProviderOptionsFlow(config_entries.OptionsFlow):
                     vol.Optional(
                         CONF_REQUIRE_PKCE,
                         default=options.get(CONF_REQUIRE_PKCE, DEFAULT_REQUIRE_PKCE),
+                    ): bool,
+                    vol.Optional(
+                        CONF_ALLOW_DYNAMIC_REGISTRATION,
+                        default=options.get(
+                            CONF_ALLOW_DYNAMIC_REGISTRATION,
+                            DEFAULT_ALLOW_DYNAMIC_REGISTRATION,
+                        ),
                     ): bool,
                 }
             ),

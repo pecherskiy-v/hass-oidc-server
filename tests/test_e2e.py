@@ -33,7 +33,10 @@ from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.typing import ClientSessionGenerator
 
-from custom_components.oidc_provider.const import DOMAIN
+from custom_components.oidc_provider.const import (
+    CONF_ALLOW_DYNAMIC_REGISTRATION,
+    DOMAIN,
+)
 from custom_components.oidc_provider.token_validator import validate_access_token
 
 # The issuer is derived from the request Host. Pin it with forwarded headers so
@@ -55,7 +58,7 @@ async def setup_provider(enable_custom_integrations: None, hass: HomeAssistant) 
     """
     assert await async_setup_component(hass, "http", {})
 
-    entry = MockConfigEntry(domain=DOMAIN, data={})
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={CONF_ALLOW_DYNAMIC_REGISTRATION: True})
     entry.add_to_hass(hass)
 
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -287,3 +290,40 @@ async def test_discovery_metadata_advertises_endpoints(
     assert discovery["authorization_endpoint"] == f"{ISSUER_BASE}/oidc/authorize"
     assert discovery["token_endpoint"] == f"{ISSUER_BASE}/oidc/token"
     assert discovery["registration_endpoint"] == f"{ISSUER_BASE}/oidc/register"
+
+
+async def test_dynamic_registration_disabled_by_default(
+    enable_custom_integrations: None,
+    hass: HomeAssistant,
+    hass_client: ClientSessionGenerator,
+) -> None:
+    """With DCR off (the default) registration is refused and unadvertised."""
+    assert await async_setup_component(hass, "http", {})
+
+    entry = MockConfigEntry(domain=DOMAIN, data={})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    client = await hass_client()
+
+    resp = await client.post(
+        "/oidc/register",
+        json={"client_name": "Test MCP Client", "redirect_uris": [REDIRECT_URI]},
+        headers=FORWARDED,
+    )
+    assert resp.status == 403
+    assert await resp.json() == {
+        "error": "access_denied",
+        "error_description": "Dynamic client registration is disabled",
+    }
+    assert hass.data[DOMAIN]["clients"] == {}
+
+    for path in (
+        "/oidc/.well-known/openid-configuration",
+        "/.well-known/oauth-authorization-server/oidc",
+        "/oidc/.well-known/oauth-authorization-server",
+    ):
+        resp = await client.get(path, headers=FORWARDED)
+        assert resp.status == 200
+        assert "registration_endpoint" not in await resp.json()

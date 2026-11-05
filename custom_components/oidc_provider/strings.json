@@ -9,5 +9,20 @@
     "abort": {
       "single_instance_allowed": "Only a single instance is allowed."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "OIDC Provider Options",
+        "data": {
+          "require_pkce": "Require PKCE (code challenge) for authorization requests",
+          "allow_dynamic_registration": "Allow dynamic client registration (RFC 7591)"
+        },
+        "data_description": {
+          "require_pkce": "Clients must send a code_challenge and exchange it for a code_verifier (OAuth 2.1 compliance).",
+          "allow_dynamic_registration": "Let anyone reach /oidc/register to create a client. Off by default; turn on only for clients that self-register."
+        }
+      }
+    }
   }
 }

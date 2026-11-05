@@ -15,7 +15,9 @@ from homeassistant.helpers.storage import Store
 
 from .client_manager import create_client, validate_redirect_uris
 from .const import (
+    CONF_ALLOW_DYNAMIC_REGISTRATION,
     CONF_REQUIRE_PKCE,
+    DEFAULT_ALLOW_DYNAMIC_REGISTRATION,
     DEFAULT_REQUIRE_PKCE,
     DOMAIN,
     PANEL_URL_PATH,
@@ -66,6 +68,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Store configuration options
     hass.data[DOMAIN][CONF_REQUIRE_PKCE] = entry.options.get(
         CONF_REQUIRE_PKCE, DEFAULT_REQUIRE_PKCE
+    )
+    hass.data[DOMAIN][CONF_ALLOW_DYNAMIC_REGISTRATION] = entry.options.get(
+        CONF_ALLOW_DYNAMIC_REGISTRATION, DEFAULT_ALLOW_DYNAMIC_REGISTRATION
     )
 
     # Listen for options updates
@@ -311,6 +316,13 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
         CONF_REQUIRE_PKCE, DEFAULT_REQUIRE_PKCE
     )
     _LOGGER.info("PKCE enforcement updated: %s", hass.data[DOMAIN][CONF_REQUIRE_PKCE])
+    hass.data[DOMAIN][CONF_ALLOW_DYNAMIC_REGISTRATION] = entry.options.get(
+        CONF_ALLOW_DYNAMIC_REGISTRATION, DEFAULT_ALLOW_DYNAMIC_REGISTRATION
+    )
+    _LOGGER.info(
+        "Dynamic client registration updated: %s",
+        hass.data[DOMAIN][CONF_ALLOW_DYNAMIC_REGISTRATION],
+    )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

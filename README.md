@@ -37,6 +37,20 @@ This integration acts as an OIDC abstraction layer on top of Home Assistant's bu
 1. Search for "OIDC Provider"
 1. Click to install
 
+## Options
+
+Open **Settings** → **Devices & Services** → **OIDC Provider** → **Configure**:
+
+- **Require PKCE** (default: on): authorization requests must carry a PKCE code challenge (OAuth 2.1).
+- **Allow dynamic client registration** (default: **off**): whether clients may register themselves at `POST /oidc/register` (RFC 7591).
+
+With dynamic client registration disabled (the default):
+
+- `POST /oidc/register` answers `403` with `{"error": "access_denied", "error_description": "Dynamic client registration is disabled"}`.
+- The discovery documents (`openid-configuration` and `oauth-authorization-server`) omit `registration_endpoint`, so clients that discover endpoints automatically are not pointed at a refused endpoint.
+
+Register clients yourself with the `register_client` action instead (see below). Enable the option only if you actually need self-registration; dynamically registered clients always go through the consent screen.
+
 ## Usage
 
 ### Registering a Client
@@ -120,7 +134,7 @@ Once installed, your Home Assistant instance exposes the following OIDC endpoint
 - **Token**: `https://your-ha-instance/oidc/token`
 - **UserInfo**: `https://your-ha-instance/oidc/userinfo`
 - **JWKS**: `https://your-ha-instance/oidc/jwks`
-- **Dynamic Client Registration**: `https://your-ha-instance/oidc/register`
+- **Dynamic Client Registration**: `https://your-ha-instance/oidc/register` (only advertised while **Allow dynamic client registration** is enabled)
 
 ### Using with Claude Connectors
 
@@ -137,7 +151,7 @@ Once installed, your Home Assistant instance exposes the following OIDC endpoint
 - **Client Secrets**: Store client secrets securely and never commit them to version control
 - **Refresh Tokens**: Persisted across restarts, valid for 30 days by default
 - **Access Tokens**: Valid for 1 hour by default
-- **Dynamic Registration**: Anyone who can reach your instance can register a client. Those clients always go through the consent screen, so a user has to approve them explicitly
+- **Dynamic Registration**: Disabled by default. When enabled, anyone who can reach your instance can register a client; those clients always go through the consent screen, so a user has to approve them explicitly
 - **Resource Binding**: A resource server that validates tokens with an expected audience (for example hass-mcp-server) only accepts tokens whose `aud` is that resource. Clients must send the `resource` parameter (RFC 8707) when authorizing; a token minted for a client without it is rejected there
 
 ## Supported Scopes

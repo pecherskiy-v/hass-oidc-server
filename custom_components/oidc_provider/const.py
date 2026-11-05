@@ -64,5 +64,9 @@ RATE_LIMIT_PENALTY = 60  # Lockout period in seconds after max attempts
 DEFAULT_REQUIRE_PKCE = True  # Default to required for security (OAuth 2.1 compliance)
 CONF_REQUIRE_PKCE = "require_pkce"
 
+# Dynamic Client Registration (RFC 7591)
+DEFAULT_ALLOW_DYNAMIC_REGISTRATION = False  # Default to off: no unauthenticated client creation
+CONF_ALLOW_DYNAMIC_REGISTRATION = "allow_dynamic_registration"
+
 # Frontend panel serving the login flow (hidden from the sidebar)
 PANEL_URL_PATH = "oidc_login"

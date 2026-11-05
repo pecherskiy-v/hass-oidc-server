@@ -7,7 +7,10 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import jwt
 import pytest
 
-from custom_components.oidc_provider.const import DOMAIN
+from custom_components.oidc_provider.const import (
+    CONF_ALLOW_DYNAMIC_REGISTRATION,
+    DOMAIN,
+)
 from custom_components.oidc_provider.http import (
     OAuth2AuthorizationServerMetadataAlternateView,
     OAuth2AuthorizationServerMetadataView,
@@ -287,6 +290,13 @@ def test_get_ha_external_url_returns_none_on_exception(hass):
         assert _get_ha_external_url(request) is None
 
 
+def _discovery_app(dcr_enabled: bool) -> dict:
+    """Build a request app whose hass carries the given DCR setting."""
+    hass = Mock()
+    hass.data = {DOMAIN: {CONF_ALLOW_DYNAMIC_REGISTRATION: dcr_enabled}}
+    return {"hass": hass}
+
+
 @pytest.mark.asyncio
 async def test_oidc_discovery_endpoint():
     """Test OIDC discovery endpoint returns correct metadata."""
@@ -294,6 +304,7 @@ async def test_oidc_discovery_endpoint():
     request = Mock()
     request.headers = {}
     request.url.origin.return_value = "https://homeassistant.local"
+    request.app = _discovery_app(dcr_enabled=True)
 
     # Create the view and call get
     view = OIDCDiscoveryView()
@@ -340,6 +351,7 @@ async def test_oidc_discovery_with_proxy():
         "X-Forwarded-Host": "ha.example.com",
     }
     request.url.origin.return_value = "http://localhost:8123"
+    request.app = _discovery_app(dcr_enabled=True)
 
     # Create the view and call get
     view = OIDCDiscoveryView()
@@ -361,6 +373,7 @@ async def test_oauth2_authorization_server_metadata():
     request = Mock()
     request.headers = {}
     request.url.origin.return_value = "https://homeassistant.local"
+    request.app = _discovery_app(dcr_enabled=True)
 
     view = OAuth2AuthorizationServerMetadataView()
     response = await view.get(request)
@@ -384,6 +397,7 @@ async def test_oauth2_authorization_server_metadata_alternate_path():
     request = Mock()
     request.headers = {}
     request.url.origin.return_value = "https://homeassistant.local"
+    request.app = _discovery_app(dcr_enabled=True)
 
     view = OAuth2AuthorizationServerMetadataAlternateView()
     assert view.url == "/oidc/.well-known/oauth-authorization-server"
@@ -401,6 +415,33 @@ async def test_oauth2_authorization_server_metadata_alternate_path():
     assert data["registration_endpoint"] == "https://homeassistant.local/oidc/register"
     assert "authorization_code" in data["grant_types_supported"]
     assert "refresh_token" in data["grant_types_supported"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "view_factory",
+    [
+        lambda: OIDCDiscoveryView(),
+        lambda: OAuth2AuthorizationServerMetadataView(),
+        lambda: OAuth2AuthorizationServerMetadataAlternateView(),
+    ],
+    ids=["openid-configuration", "as-metadata", "as-metadata-alt"],
+)
+async def test_discovery_omits_registration_endpoint_when_dcr_disabled(view_factory):
+    """Registration is off by default, so discovery must not advertise its endpoint."""
+    request = Mock()
+    request.headers = {}
+    request.url.origin.return_value = "https://homeassistant.local"
+    request.app = _discovery_app(dcr_enabled=False)
+
+    response = await view_factory().get(request)
+
+    assert response.status == 200
+    data = json.loads(response.body.decode("utf-8"))
+    assert "registration_endpoint" not in data
+    # The rest of the document is unaffected
+    assert data["issuer"] == "https://homeassistant.local/oidc"
+    assert data["token_endpoint"] == "https://homeassistant.local/oidc/token"
 
 
 @pytest.mark.asyncio
@@ -703,12 +744,45 @@ async def test_oidc_continue_view_requires_explicit_approval():
 
 
 @pytest.mark.asyncio
+async def test_oidc_register_view_disabled_by_default():
+    """Dynamic registration is off by default: 403 before the payload is read."""
+    hass = Mock()
+    hass.data = {DOMAIN: {"clients": {}, "store": Mock()}}
+
+    request = Mock()
+    request.app = {"hass": hass}
+    request.json = AsyncMock(
+        return_value={
+            "client_name": "Test Client",
+            "redirect_uris": ["https://example.com/callback"],
+        }
+    )
+
+    response = await OIDCRegisterView().post(request)
+
+    assert response.status == 403
+    data = json.loads(response.body.decode("utf-8"))
+    assert data == {
+        "error": "access_denied",
+        "error_description": "Dynamic client registration is disabled",
+    }
+    assert request.json.await_count == 0
+    assert hass.data[DOMAIN]["clients"] == {}
+
+
+@pytest.mark.asyncio
 async def test_oidc_register_view_success():
     """Test successful dynamic client registration."""
     from unittest.mock import patch
 
     hass = Mock()
-    hass.data = {DOMAIN: {"clients": {}, "store": Mock()}}
+    hass.data = {
+        DOMAIN: {
+            "clients": {},
+            "store": Mock(),
+            CONF_ALLOW_DYNAMIC_REGISTRATION: True,
+        }
+    }
     hass.data[DOMAIN]["store"].async_save = MagicMock(return_value=None)
 
     request = Mock()
@@ -757,7 +831,7 @@ async def test_oidc_register_view_success():
 async def test_oidc_register_view_rejects_bad_client_name(client_name):
     """The name is shown on the consent screen, so it must be a bounded string."""
     hass = Mock()
-    hass.data = {DOMAIN: {"clients": {}, "store": Mock()}}
+    hass.data = {DOMAIN: {"clients": {}, "store": Mock(), CONF_ALLOW_DYNAMIC_REGISTRATION: True}}
 
     request = Mock()
     request.app = {"hass": hass}
@@ -782,7 +856,7 @@ async def test_oidc_register_view_minimal():
     hass = Mock()
     store = Mock()
     store.async_save = AsyncMock(return_value=None)
-    hass.data = {DOMAIN: {"clients": {}, "store": store}}
+    hass.data = {DOMAIN: {"clients": {}, "store": store, CONF_ALLOW_DYNAMIC_REGISTRATION: True}}
 
     request = Mock()
     request.app = {"hass": hass}
@@ -809,7 +883,7 @@ async def test_oidc_register_view_invalid_redirect_uri():
     hass = Mock()
     store = Mock()
     store.async_save = AsyncMock(return_value=None)
-    hass.data = {DOMAIN: {"clients": {}, "store": store}}
+    hass.data = {DOMAIN: {"clients": {}, "store": store, CONF_ALLOW_DYNAMIC_REGISTRATION: True}}
 
     request = Mock()
     request.app = {"hass": hass}

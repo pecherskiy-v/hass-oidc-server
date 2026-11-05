@@ -148,3 +148,52 @@ class TestOIDCProviderOptionsFlow:
         assert result["type"] == data_entry_flow.FlowResultType.FORM
         # The default should be True (from DEFAULT_REQUIRE_PKCE constant)
         assert DEFAULT_REQUIRE_PKCE is True
+
+    async def test_init_step_shows_dcr_option(self):
+        """Test init step shows the dynamic registration option."""
+        mock_config_entry = Mock()
+        mock_config_entry.options = {}
+        # Use internal _config_entry attribute to avoid deprecated setter
+        flow = OIDCProviderOptionsFlow.__new__(OIDCProviderOptionsFlow)
+        flow._config_entry = mock_config_entry
+
+        result = await flow.async_step_init(user_input=None)
+
+        assert result["type"] == data_entry_flow.FlowResultType.FORM
+        assert "allow_dynamic_registration" in result["data_schema"].schema
+
+    async def test_init_step_defaults_dcr_disabled(self):
+        """Test init step defaults dynamic registration to False."""
+        from custom_components.oidc_provider.const import (
+            DEFAULT_ALLOW_DYNAMIC_REGISTRATION,
+        )
+
+        mock_config_entry = Mock()
+        mock_config_entry.options = {}
+        # Use internal _config_entry attribute to avoid deprecated setter
+        flow = OIDCProviderOptionsFlow.__new__(OIDCProviderOptionsFlow)
+        flow._config_entry = mock_config_entry
+
+        result = await flow.async_step_init(user_input=None)
+
+        assert result["type"] == data_entry_flow.FlowResultType.FORM
+        # The default should be False (from DEFAULT_ALLOW_DYNAMIC_REGISTRATION constant)
+        assert DEFAULT_ALLOW_DYNAMIC_REGISTRATION is False
+
+    async def test_init_step_persists_dcr_choice(self):
+        """Test init step persists the dynamic registration choice."""
+        mock_config_entry = Mock()
+        mock_config_entry.options = {}
+        # Use internal _config_entry attribute to avoid deprecated setter
+        flow = OIDCProviderOptionsFlow.__new__(OIDCProviderOptionsFlow)
+        flow._config_entry = mock_config_entry
+
+        result = await flow.async_step_init(
+            user_input={"require_pkce": True, "allow_dynamic_registration": True}
+        )
+
+        assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+        assert result["data"] == {
+            "require_pkce": True,
+            "allow_dynamic_registration": True,
+        }
